@@ -1,0 +1,28 @@
+{
+  "bot_prefix": "..",
+  "bot_token" : "OTAzMjcxNzYwMTczMDcyNDQ1.YXqjYQ.VoGIubYVkWHyHAXMom1XS848dP0",
+  "application_id": "877508348357005324",
+  "sheets_id": "1tUotnYoke3fbJi16iodm6UAk1fAAdWO3qR15Q08eyRM",
+  "sheets_link": "https://docs.google.com/spreadsheets/d/1tUotnYoke3fbJi16iodm6UAk1fAAdWO3qR15Q08eyRM",
+
+
+  "accounts": {
+    "academy_payout_address": "ronin:262dd358714fd9cf42dd3853455cdf7d16be9219",
+    "scholars": {
+      "743373378672656445": {
+        "Name": "Test",
+        "PrivateKey": "0x580b1d733a11f859c71d8973e78b22581e06cc6e68473000e8ba0142a1f9041a",
+        "AccountAddress": "ronin:7dec3e3d396cf54db4c244cf8b39c1121cc5ff5c",
+        "ScholarPayoutAddress": "ronin:262dd358714fd9cf42dd3853455cdf7d16be9219",
+        "ScholarPayoutPercentage": 0.40
+      },
+      "discord_id2": {
+        "Name": "Scholar 2",
+        "PrivateKey": "0x<private key here>",
+        "AccountAddress": "ronin:<from_address>",
+        "ScholarPayoutAddress": "ronin:<scholar_address>",
+        "ScholarPayoutPercentage": 0.5
+      }
+    }
+  }
+}
