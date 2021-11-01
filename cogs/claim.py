@@ -37,8 +37,9 @@ def has_roles(context):
 class Claim(commands.Cog, name="claim"):
     def __init__(self, bot):
         self.bot = bot
-        self.FEE_PAYOUT_PERCENTAGE = 0.01
-        self.FEE_PAYOUT_ADDRESS = Web3.toChecksumAddress("0x262dd358714fd9cf42dd3853455cdf7d16be9219")
+        self.FEE_PAYOUT_PERCENTAGE = config['accounts']['fee_payout_percentage']
+        self.FEE_PAYOUT_ADDRESS = Web3.toChecksumAddress(
+            (config['accounts']['fee_payout_address']).replace('ronin:', '0x'))
         self.Transaction = namedtuple("Transaction", "from_address to_address amount")
         self.Payout = namedtuple("Payout",
                                  "name private_key nonce slp_balance scholar_transaction academy_transaction fee_transaction")
@@ -71,15 +72,15 @@ class Claim(commands.Cog, name="claim"):
 
         slp_unclaimed_balance = slp_utils.get_unclaimed_slp(account_address)
         nonce = self.nonces[account_address] = self.web3.eth.get_transaction_count(account_address)
-
         if slp_unclaimed_balance > 0:
             confirmation_msg = await context.reply(content=context.author.mention, embed=discord.Embed(
                 description=f"`{scholar_name}`(nonce: **{nonce}**) has **{slp_unclaimed_balance}** unclaimed SLP.\n\n"
                             f"*Message `Yes` if you want to claim SLP.*"))
 
-            confirmation = await self.bot.wait_for('message', timeout=30,
+            confirmation = await self.bot.wait_for('message', timeout=60,
                                                    check=lambda message: message.author.id == context.author.id)
             if confirmation.content.lower() == 'yes' and confirmation.channel == context.channel:
+                await confirmation.delete()
                 self.slp_claims[f"{context.author.id}"] = self.SlpClaim(
                     name=scholar_name,
                     address=account_address,
@@ -97,30 +98,48 @@ class Claim(commands.Cog, name="claim"):
                 slp_claim = self.slp_claims[f'{context.author.id}']
                 try:
                     slp_utils.execute_slp_claim(slp_claim, self.nonces)
+
+                    if slp_claim.state["signature"] is None:
+                        await confirmation_msg.edit(content=context.author.mention, embed=discord.Embed(
+                            description=f"**Claiming SLP for <@!{context.author.id}> did not succeed! `{slp_claim.name}` has `{slp_claim.slp_unclaimed_balance}` unclaimed SLP. Please try again.**",
+                            color=randint(0, 0x000ff)))
+                        return
+                    await confirmation_msg.edit(content=context.author.mention, embed=discord.Embed(
+                        description=f"**Claimed SLP for <@!{context.author.id}>!**",
+                        color=randint(0, 0x000ff)))
+                    return
                 except:
                     await confirmation_msg.edit(content=context.author.mention,
                                                 embed=discord.Embed(
-                                                    description=f"*There was an error while claiming SLP for `{scholar_name}`. You need to play for 14 days with this account to claim SLP.*",
+                                                    description=f"*There was an error while claiming SLP for `{scholar_name}`.*",
                                                     color=randint(0, 0x000ff)))
                     return
-                if slp_claim.state['signature'] is not None:
-                    slp_total_balance = slp_utils.get_claimed_slp(account_address)
-                    if slp_total_balance >= slp_claim.slp_claimed_balance + slp_claim.slp_unclaimed_balance:
-                        self.slp_claims.pop(str(context.author.id))
-                        await confirmation_msg.edit(content=context.author.mention, embed=discord.Embed(
-                            description=f"*Claimed SLP for <@!{context.author.id}>!*",
-                            color=randint(0, 0x000ff)))
-                        return
-                await confirmation_msg.edit(content=context.author.mention,
-                                            embed=discord.Embed(
-                                                description=f"*There was an error while claiming SLP for `{scholar_name}`. {slp_claim.name} has {slp_claim.slp_unclaimed_balance} unclaimed SLP. Please retry!*",
-                                                color=randint(0, 0x000ff)))
-                return
+        else:
+            await context.reply(embed=discord.Embed(color=0xff000,
+                                                    description=f'*The unclaimed balance is `{slp_unclaimed_balance}` for `{scholar_name}`*'))
+
+            # if slp_claim.state['signature'] is not None:
+            #     slp_total_balance = slp_utils.get_claimed_slp(account_address)
+            #     if slp_total_balance >= slp_claim.slp_claimed_balance + slp_claim.slp_unclaimed_balance:
+            #         self.slp_claims.pop(str(context.author.id))
+            #         await confirmation_msg.edit(content=context.author.mention, embed=discord.Embed(
+            #             description=f"*Claimed SLP for <@!{context.author.id}>!*",
+            #             color=randint(0, 0x000ff)))
+            # await confirmation_msg.edit(content=context.author.mention,
+            #                             embed=discord.Embed(
+            #                                 description=f"*There was an error while claiming SLP for `{scholar_name}`. {slp_claim.name} has {slp_claim.slp_unclaimed_balance} unclaimed SLP. Please retry!*",
+            #                                 color=randint(0, 0x000ff)))
+            # return
 
     @commands.command(name="sendslp",
-                      description=f"SLP payout. Syntax: '<prefix>transferslp <receiver ronin:address> <sender ronin:address> <amount> <private_key>'.'")
-    async def transfer_slp(self, context):
-        scholar = config['accounts']['scholars'][str(context.author.id)]
+                      description=f"SLP payout. Syntax: '<prefix>sendslp'.'")
+    async def send_slp(self, context):
+        try:
+            scholar = config['accounts']['scholars'][str(context.author.id)]
+        except KeyError:
+            await context.reply(embed=discord.Embed(color=0xff000,
+                                                    description="*You can't use this command yet. Please contact the admin.*"))
+            return
         scholar_name = scholar["Name"]
         account_address = self.parseRoninAddress(scholar["AccountAddress"])
         scholar_payout_address = self.parseRoninAddress(scholar["ScholarPayoutAddress"])
@@ -128,7 +147,7 @@ class Claim(commands.Cog, name="claim"):
         slp_balance = slp_utils.get_claimed_slp(account_address)
         if slp_balance == 0:
             await context.reply(embed=discord.Embed(
-                description=f"Can't execute command for <@!{context.author.id}> because SLP balance is zero."),
+                description=f"Can't execute command for `{scholar_name}` because SLP balance is zero."),
                 color=randint(0, 0xff000))
             return
 
@@ -147,7 +166,7 @@ class Claim(commands.Cog, name="claim"):
         payout = self.Payout(name=scholar_name,
                              private_key=scholar["PrivateKey"],
                              slp_balance=slp_balance,
-                             nonce=self.nonces[account_address],
+                             nonce=self.web3.eth.get_transaction_count(account_address),
                              scholar_transaction=self.Transaction(from_address=account_address,
                                                                   to_address=scholar_payout_address,
                                                                   amount=scholar_payout_amount),
@@ -158,49 +177,53 @@ class Claim(commands.Cog, name="claim"):
                                                               to_address=self.FEE_PAYOUT_ADDRESS,
                                                               amount=fee_payout_amount))
 
-        embed = discord.Embed(color=randint(0, 0xff000), description=f"Payout for `{payout.name}`\n"
-                                                                     f"├─ SLP balance: {payout.slp_balance} SLP\n"
-                                                                     f"├─ Nonce: {payout.nonce}\n"
-                                                                     f"├─ Scholar payout: send {payout.scholar_transaction.amount:5} SLP from {self.formatRoninAddress(payout.scholar_transaction.from_address)} to {self.formatRoninAddress(payout.scholar_transaction.to_address)}\n"
-                                                                     f"├─ Academy payout: send {payout.academy_transaction.amount:5} SLP from {self.formatRoninAddress(payout.academy_transaction.from_address)} to {self.formatRoninAddress(payout.academy_transaction.to_address)}\n"
-                                                                     f"└─ Admin Fee     : send {payout.fee_transaction.amount:5} SLP from {self.formatRoninAddress(payout.fee_transaction.from_address)} to {self.formatRoninAddress(payout.fee_transaction.to_address)}\n\n"
+        embed = discord.Embed(color=randint(0, 0xff000), description=f"**Payout for `{payout.name}`**\n\n"
+                                                                     f"**SLP balance:**     `{payout.slp_balance} SLP`\n"
+                                                                     f"**Nonce:**           `{payout.nonce}`\n\n"
+                                                                     f"**Scholar payout:** Send `{payout.scholar_transaction.amount:5} SLP` from `{self.formatRoninAddress(payout.scholar_transaction.from_address)}` to `{self.formatRoninAddress(payout.scholar_transaction.to_address)}`\n\n"
+                                                                     f"**Academy payout:** Send `{payout.academy_transaction.amount:5} SLP` from `{self.formatRoninAddress(payout.academy_transaction.from_address)}` to `{self.formatRoninAddress(payout.academy_transaction.to_address)}`\n\n"
+                                                                     f"**Admin Fee     :** Send `{payout.fee_transaction.amount:5} SLP` from `{self.formatRoninAddress(payout.fee_transaction.from_address)}` to `{self.formatRoninAddress(payout.fee_transaction.to_address)}`\n\n"
                                                                      f"*Message `Yes` if you want to execute this transaction*")
 
         tz = timezone('EST')
         embed.timestamp = datetime.datetime.now(tz=tz)
         await context.reply(content=context.author.mention, embed=embed)
-        confirmation = await self.bot.wait_for('message', check=lambda message: message.author == context.author)
+        confirmation = await self.bot.wait_for('message', timeout=60, check=lambda message: message.author == context.author)
         hashes = []
         if confirmation.content.lower() == 'yes' and confirmation.channel == context.channel:
-            embed.description = f"Executing payout for `{payout.name}`\n\n\n"
-            await confirmation.edit(embed=embed)
+            await confirmation.delete()
+            embed.description = f"**Executing payout for `{payout.name}`**\n\n\n"
+            msg = await context.reply(content=context.author.mention, embed=embed)
 
             hash = slp_utils.transfer_slp(payout.scholar_transaction, payout.private_key, payout.nonce)
             hashes.append(hash)
             time.sleep(0.250)
-            embed.description = f'**SCHOLAR PAYOUT**' \
-                                f'Sent {payout.scholar_transaction.amount} SLP from {self.formatRoninAddress(payout.scholar_transaction.from_address)} to {self.formatRoninAddress(payout.scholar_transaction.to_address)}...\n\n' \
-                                f'*Hash: {hash} - Explorer: https://explorer.roninchain.com/tx/{str(hash)}*\n\n\n'
-            msg = await context.send(embed=embed)
+            embed.description += f'**SCHOLAR PAYOUT**\n' \
+                                 f'Sent `{payout.scholar_transaction.amount} SLP` from `{self.formatRoninAddress(payout.scholar_transaction.from_address)}` to `{self.formatRoninAddress(payout.scholar_transaction.to_address)}`\n' \
+                                 f'**Hash: **{hash}\n' \
+                                 f'**Explorer: **https://explorer.roninchain.com/tx/{str(hash)}\n\n\n'
+            msg = await msg.edit(content=context.author.mention, embed=embed)
 
             hash = slp_utils.transfer_slp(payout.academy_transaction, payout.private_key, payout.nonce + 1)
             hashes.append(hash)
             time.sleep(0.250)
-            embed.description += f'**ACADEMY PAYOUT**' \
-                                 f'Sent {payout.academy_transaction.amount} SLP from {self.formatRoninAddress(payout.academy_transaction.from_address)} to {self.formatRoninAddress(payout.academy_transaction.to_address)}...\n\n' \
-                                 f'*Hash: {hash} - Explorer: https://explorer.roninchain.com/tx/{str(hash)}*\n\n\n'
-            await msg.edit(embed=embed)
+            embed.description += f'**ACADEMY PAYOUT**\n' \
+                                 f'Sent `{payout.academy_transaction.amount}` SLP from `{self.formatRoninAddress(payout.academy_transaction.from_address)}` to `{self.formatRoninAddress(payout.academy_transaction.to_address)}`\n' \
+                                 f'**Hash:** {hash}\n' \
+                                 f'**Explorer:** https://explorer.roninchain.com/tx/{str(hash)}\n\n\n'
+            msg = await msg.edit(content=context.author.mention, embed=embed)
 
-            hash = slp_utils.transfer_slp(payout.academy_transaction, payout.private_key, payout.nonce + 1)
+            hash = slp_utils.transfer_slp(payout.fee_transaction, payout.private_key, payout.nonce + 2)
             hashes.append(hash)
             time.sleep(0.250)
-            embed.description += f'**ADMIN FEE PAYOUT**' \
-                                 f'Sent {payout.fee_transaction.amount} SLP from {self.formatRoninAddress(payout.fee_transaction.from_address)} to {self.formatRoninAddress(payout.fee_transaction.to_address)}...\n\n' \
-                                 f'*Hash: {hash} - Explorer: https://explorer.roninchain.com/tx/{str(hash)}*'
+            embed.description += f'**ADMIN FEE PAYOUT**\n' \
+                                 f'Sent `{payout.fee_transaction.amount}` SLP from `{self.formatRoninAddress(payout.fee_transaction.from_address)}` to `{self.formatRoninAddress(payout.fee_transaction.to_address)}`\n' \
+                                 f'**Hash:** {hash}\n' \
+                                 f'**Explorer:** https://explorer.roninchain.com/tx/{str(hash)}'
             tz = timezone('EST')
             current_time = datetime.datetime.now(tz=tz)
             embed.timestamp = current_time
-            await msg.edit(embed=embed)
+            await msg.edit(content=context.author.mention, embed=embed)
 
             self.write_to_sheets(total_slp=slp_balance, scholar_payout=payout.scholar_transaction.amount,
                                  academy_payout=payout.academy_transaction.amount,

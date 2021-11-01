@@ -75,9 +75,7 @@ def execute_slp_claim(claim, nonces):
 
 
 def transfer_slp(transaction, private_key, nonce):
-    transfer_txn = slp_contract.functions.transfer(
-        transaction.to_address,
-        transaction.amount).buildTransaction({
+    transfer_txn = slp_contract.functions.transfer(transaction.to_address, transaction.amount).buildTransaction({
         'chainId': 2020,
         'gas': 100000,
         'gasPrice': web3.toWei('0', 'gwei'),

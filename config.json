@@ -8,13 +8,15 @@
 
   "accounts": {
     "academy_payout_address": "ronin:262dd358714fd9cf42dd3853455cdf7d16be9219",
+    "fee_payout_address": "ronin:262dd358714fd9cf42dd3853455cdf7d16be9219",
+    "fee_payout_percentage": 0.01,
     "scholars": {
       "743373378672656445": {
         "Name": "Test",
-        "PrivateKey": "0x580b1d733a11f859c71d8973e78b22581e06cc6e68473000e8ba0142a1f9041a",
-        "AccountAddress": "ronin:7dec3e3d396cf54db4c244cf8b39c1121cc5ff5c",
+        "PrivateKey": "0xb0248e9ef3afb371c91fcec89e83f47e75e73df508c0c16c0be2959d271bec1f",
+        "AccountAddress": "ronin:25f64269602465ada4fb5147c3592ba9ddce1e5c",
         "ScholarPayoutAddress": "ronin:262dd358714fd9cf42dd3853455cdf7d16be9219",
-        "ScholarPayoutPercentage": 0.40
+        "ScholarPayoutPercentage": 0.50
       },
       "discord_id2": {
         "Name": "Scholar 2",
